@@ -235,6 +235,9 @@ class ComponentManager private constructor(private val context: Context) {
     /**
      * Reinitializes the PhoneAgent with updated configuration.
      * Call this after settings have been changed.
+     * 
+     * Note: This will NOT reinitialize if a task is currently running or paused,
+     * to prevent accidentally cancelling user tasks.
      */
     fun reinitializeAgent() {
         if (userService == null) {
@@ -242,7 +245,15 @@ class ComponentManager private constructor(private val context: Context) {
             return
         }
         
-        // Cancel any running task
+        // Safety check: don't reinitialize while a task is active
+        _phoneAgent?.let { agent ->
+            if (agent.isRunning() || agent.isPaused()) {
+                Logger.w(TAG, "Cannot reinitialize agent: task is currently active (state: ${agent.getState()})")
+                return
+            }
+        }
+        
+        // Cancel any running task (should be IDLE at this point, but just in case)
         _phoneAgent?.cancel()
         
         // Recreate model client with new config

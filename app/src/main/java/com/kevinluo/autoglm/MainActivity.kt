@@ -175,9 +175,6 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         componentManager = ComponentManager.getInstance(this)
         Logger.i(TAG, "ComponentManager initialized")
         
-        // Log all launchable apps at startup
-        logAllLaunchableApps()
-        
         initViews()
         setupListeners()
         setupShizukuListeners()
@@ -188,38 +185,6 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         updateTaskStatus(TaskStatus.IDLE)
     }
     
-    /**
-     * Logs all launchable apps for debugging purposes.
-     *
-     * Queries the package manager for all apps with launcher activities
-     * and logs them for debugging. Only logs the first 20 apps to avoid
-     * excessive log output.
-     */
-    private fun logAllLaunchableApps() {
-        // Query apps without loading icons to avoid excessive logging
-        val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
-            addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-        }
-        val resolveInfoList = packageManager.queryIntentActivities(intent, 0)
-        
-        val apps = resolveInfoList.mapNotNull { resolveInfo ->
-            val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
-            val displayName = resolveInfo.loadLabel(packageManager)?.toString() ?: return@mapNotNull null
-            val packageName = activityInfo.packageName ?: return@mapNotNull null
-            displayName to packageName
-        }.distinctBy { it.second }
-        
-        Logger.i(TAG, "=== All Launchable Apps: ${apps.size} total ===")
-        // Only log first 20 apps to avoid log quota
-        apps.take(20).forEach { (name, pkg) ->
-            Logger.i(TAG, "  $name -> $pkg")
-        }
-        if (apps.size > 20) {
-            Logger.i(TAG, "  ... and ${apps.size - 20} more apps")
-        }
-        Logger.i(TAG, "=== End of App List ===")
-    }
-
     /**
      * Updates the overlay permission status display.
      *
@@ -299,7 +264,12 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         // Only reinitialize if service is connected and we need to refresh
         if (componentManager.isServiceConnected) {
             // Check if settings actually changed before reinitializing
-            if (componentManager.settingsManager.hasConfigChanged()) {
+            // But NEVER reinitialize while a task is running or paused - this would cancel the task!
+            val isTaskActive = componentManager.phoneAgent?.let { 
+                it.isRunning() || it.isPaused() 
+            } ?: false
+            
+            if (!isTaskActive && componentManager.settingsManager.hasConfigChanged()) {
                 componentManager.reinitializeAgent()
             }
             componentManager.setPhoneAgentListener(this)
