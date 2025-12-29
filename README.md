@@ -5,7 +5,7 @@
 
 **基于 Open-AutoGLM 的 Android 原生手机智能助手应用**
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9-purple.svg)](https://kotlinlang.org)
 
@@ -396,7 +396,7 @@ A:
 
 ## 📄 开源协议
 
-本项目基于 [Apache License 2.0](LICENSE) 开源。
+本项目基于 [MIT License](LICENSE) 开源。
 
 ## 🙏 致谢
 
