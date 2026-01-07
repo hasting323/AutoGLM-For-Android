@@ -96,6 +96,13 @@ class SettingsManager(private val context: Context) {
         // Dev profiles import key
         private const val KEY_DEV_PROFILES_IMPORTED = "dev_profiles_imported"
         
+        // Voice settings keys
+        private const val KEY_VOICE_MODEL_DOWNLOADED = "voice_model_downloaded"
+        private const val KEY_VOICE_MODEL_PATH = "voice_model_path"
+        private const val KEY_VOICE_CONTINUOUS_LISTENING = "voice_continuous_listening"
+        private const val KEY_VOICE_WAKE_WORDS = "voice_wake_words"
+        private const val KEY_VOICE_WAKE_SENSITIVITY = "voice_wake_sensitivity"
+        
         // Default values
         private val DEFAULT_MODEL_CONFIG = ModelConfig()
         private val DEFAULT_AGENT_CONFIG = AgentConfig()
@@ -688,5 +695,129 @@ class SettingsManager(private val context: Context) {
             Logger.e(TAG, "Failed to import dev profiles", e)
             -1
         }
+    }
+    
+    // ==================== Voice Settings ====================
+
+    /**
+     * Gets the voice configuration.
+     *
+     * @return The current voice configuration
+     */
+    fun getVoiceConfig(): com.kevinluo.autoglm.voice.VoiceConfig {
+        return com.kevinluo.autoglm.voice.VoiceConfig(
+            modelDownloaded = prefs.getBoolean(KEY_VOICE_MODEL_DOWNLOADED, false),
+            modelPath = prefs.getString(KEY_VOICE_MODEL_PATH, null),
+            continuousListening = prefs.getBoolean(KEY_VOICE_CONTINUOUS_LISTENING, false),
+            wakeWords = getWakeWordsList(),
+            wakeWordSensitivity = prefs.getFloat(KEY_VOICE_WAKE_SENSITIVITY, 0.6f)
+        )
+    }
+
+    /**
+     * Saves the voice configuration.
+     *
+     * @param config The voice configuration to save
+     */
+    fun saveVoiceConfig(config: com.kevinluo.autoglm.voice.VoiceConfig) {
+        prefs.edit().apply {
+            putBoolean(KEY_VOICE_MODEL_DOWNLOADED, config.modelDownloaded)
+            putString(KEY_VOICE_MODEL_PATH, config.modelPath)
+            putBoolean(KEY_VOICE_CONTINUOUS_LISTENING, config.continuousListening)
+            putString(KEY_VOICE_WAKE_WORDS, config.wakeWords.joinToString(","))
+            putFloat(KEY_VOICE_WAKE_SENSITIVITY, config.wakeWordSensitivity)
+            apply()
+        }
+    }
+
+    /**
+     * Checks if the voice model is downloaded.
+     *
+     * @return true if the model is downloaded, false otherwise
+     */
+    fun isVoiceModelDownloaded(): Boolean {
+        return prefs.getBoolean(KEY_VOICE_MODEL_DOWNLOADED, false)
+    }
+
+    /**
+     * Sets the voice model download status.
+     *
+     * @param downloaded Whether the model is downloaded
+     * @param path The path to the downloaded model, or null if not downloaded
+     */
+    fun setVoiceModelDownloaded(downloaded: Boolean, path: String?) {
+        prefs.edit().apply {
+            putBoolean(KEY_VOICE_MODEL_DOWNLOADED, downloaded)
+            if (path != null) {
+                putString(KEY_VOICE_MODEL_PATH, path)
+            } else {
+                remove(KEY_VOICE_MODEL_PATH)
+            }
+            apply()
+        }
+    }
+
+    /**
+     * Gets the voice model path.
+     *
+     * @return The path to the voice model, or null if not downloaded
+     */
+    fun getVoiceModelPath(): String? {
+        return prefs.getString(KEY_VOICE_MODEL_PATH, null)
+    }
+
+    /**
+     * Sets whether continuous listening is enabled.
+     *
+     * @param enabled Whether continuous listening should be enabled
+     */
+    fun setContinuousListening(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_VOICE_CONTINUOUS_LISTENING, enabled).apply()
+    }
+
+    /**
+     * Checks if continuous listening is enabled.
+     *
+     * @return true if continuous listening is enabled, false otherwise
+     */
+    fun isContinuousListeningEnabled(): Boolean {
+        return prefs.getBoolean(KEY_VOICE_CONTINUOUS_LISTENING, false)
+    }
+
+    /**
+     * Gets the wake words list.
+     *
+     * @return List of wake words
+     */
+    fun getWakeWordsList(): List<String> {
+        val wordsStr = prefs.getString(KEY_VOICE_WAKE_WORDS, "你好小智") ?: "你好小智"
+        return wordsStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    /**
+     * Sets the wake words.
+     *
+     * @param wakeWords List of wake words
+     */
+    fun setWakeWords(wakeWords: List<String>) {
+        prefs.edit().putString(KEY_VOICE_WAKE_WORDS, wakeWords.joinToString(",")).apply()
+    }
+
+    /**
+     * Gets the wake word sensitivity.
+     *
+     * @return The sensitivity value (0.0 to 1.0)
+     */
+    fun getWakeWordSensitivity(): Float {
+        return prefs.getFloat(KEY_VOICE_WAKE_SENSITIVITY, 0.5f)
+    }
+
+    /**
+     * Sets the wake word sensitivity.
+     *
+     * @param sensitivity The sensitivity value (0.0 to 1.0)
+     */
+    fun setWakeWordSensitivity(sensitivity: Float) {
+        prefs.edit().putFloat(KEY_VOICE_WAKE_SENSITIVITY, sensitivity.coerceIn(0f, 1f)).apply()
     }
 }

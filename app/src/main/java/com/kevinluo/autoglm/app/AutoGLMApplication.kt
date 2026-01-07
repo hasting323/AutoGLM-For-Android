@@ -6,8 +6,10 @@ import android.os.Bundle
 import com.kevinluo.autoglm.config.SystemPrompts
 import com.kevinluo.autoglm.settings.SettingsManager
 import com.kevinluo.autoglm.ui.FloatingWindowService
+import com.kevinluo.autoglm.util.KeepAliveManager
 import com.kevinluo.autoglm.util.LogFileManager
 import com.kevinluo.autoglm.util.Logger
+import com.kevinluo.autoglm.util.ServiceStateManager
 
 /**
  * Application class that manages app-wide lifecycle events.
@@ -40,6 +42,9 @@ class AutoGLMApplication : Application() {
 
         // Load custom system prompts if set
         loadCustomSystemPrompts()
+        
+        // 初始化保活状态
+        KeepAliveManager.syncFixState(this)
 
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
@@ -58,7 +63,8 @@ class AutoGLMApplication : Application() {
             }
 
             override fun onActivityResumed(activity: Activity) {
-                // No action needed
+                // 同步修复状态
+                KeepAliveManager.syncFixState(this@AutoGLMApplication)
             }
 
             override fun onActivityPaused(activity: Activity) {
@@ -69,10 +75,12 @@ class AutoGLMApplication : Application() {
                 activityCount--
                 Logger.d(TAG, "Activity stopped: ${activity.localClassName}, count: $activityCount")
 
-                // App went to background - show floating window
+                // App went to background - show floating window if enabled
                 if (activityCount == 0) {
-                    Logger.d(TAG, "App in background - showing floating window")
-                    FloatingWindowService.getInstance()?.show()
+                    Logger.d(TAG, "App in background - checking floating window state")
+                    if (ServiceStateManager.isFloatingWindowEnabled(this@AutoGLMApplication)) {
+                        FloatingWindowService.getInstance()?.show()
+                    }
                 }
             }
 

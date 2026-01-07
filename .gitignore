@@ -40,6 +40,9 @@ Thumbs.db
 # AI tools
 .claude/
 .kiro/
+.agent/
+.shared/
+.github/
 
 # External projects
 Open-AutoGLM/

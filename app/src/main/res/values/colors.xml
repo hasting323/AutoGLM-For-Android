@@ -90,4 +90,10 @@
     <color name="keyboard_text">#FFFFFFFF</color>
     <color name="keyboard_status_text">#FF81C784</color>
     <color name="keyboard_hint_text">#FF888888</color>
+    
+    <!-- Switch Colors -->
+    <color name="switch_track_unchecked">#FF505050</color>
+    <color name="switch_track_checked">@color/primary</color>
+    <color name="switch_thumb_unchecked">#FFB0B0B0</color>
+    <color name="switch_thumb_checked">@color/white</color>
 </resources>

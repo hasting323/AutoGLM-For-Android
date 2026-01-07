@@ -1,6 +1,9 @@
 package com.kevinluo.autoglm.settings
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -15,8 +18,10 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -26,8 +31,13 @@ import com.kevinluo.autoglm.model.ModelClient
 import com.kevinluo.autoglm.model.ModelConfig
 import com.kevinluo.autoglm.util.LogFileManager
 import com.kevinluo.autoglm.util.Logger
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import com.kevinluo.autoglm.voice.VoiceModelManager
+import com.kevinluo.autoglm.voice.VoiceModelDownloadListener
+import com.kevinluo.autoglm.voice.ContinuousListeningService
 import kotlinx.coroutines.launch
 
 /**
@@ -65,7 +75,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var languageEnglish: RadioButton
     
     // Buttons
-    private lateinit var saveButton: Button
+    private lateinit var saveButton: com.google.android.material.floatingactionbutton.FloatingActionButton
     private lateinit var resetButton: Button
     private lateinit var testConnectionButton: Button
     private lateinit var backBtn: android.widget.ImageButton
@@ -88,9 +98,47 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnExportLogs: Button
     private lateinit var btnClearLogs: Button
     
+    // Voice settings views
+    private lateinit var voiceModelStatus: TextView
+    private lateinit var btnVoiceModelAction: com.google.android.material.button.MaterialButton
+    private lateinit var switchContinuousListening: MaterialSwitch
+    private lateinit var wakeWordInput: TextInputEditText
+    private lateinit var sensitivitySlider: Slider
+    private var voiceModelManager: VoiceModelManager? = null
+    
     // Profile data
     private var savedProfiles: List<SavedModelProfile> = emptyList()
     private var currentProfileId: String? = null
+    
+    // Notification permission launcher for Android 13+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Permission granted, start the service
+            startContinuousListeningService()
+        } else {
+            // Permission denied, reset the switch
+            switchContinuousListening.isChecked = false
+            settingsManager.setContinuousListening(false)
+            Toast.makeText(this, R.string.voice_notification_permission_required, Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    // Audio permission launcher for microphone access
+    private val audioPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Audio permission granted, now check notification permission
+            checkNotificationPermissionAndStart()
+        } else {
+            // Permission denied, reset the switch
+            switchContinuousListening.isChecked = false
+            settingsManager.setContinuousListening(false)
+            Toast.makeText(this, R.string.voice_audio_permission_required, Toast.LENGTH_LONG).show()
+        }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -167,6 +215,13 @@ class SettingsActivity : AppCompatActivity() {
         logSizeText = findViewById(R.id.logSizeText)
         btnExportLogs = findViewById(R.id.btnExportLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
+        
+        // Voice settings
+        voiceModelStatus = findViewById(R.id.voiceModelStatus)
+        btnVoiceModelAction = findViewById(R.id.btnVoiceModelAction)
+        switchContinuousListening = findViewById(R.id.switchContinuousListening)
+        wakeWordInput = findViewById(R.id.wakeWordInput)
+        sensitivitySlider = findViewById(R.id.sensitivitySlider)
     }
     
     /**
@@ -189,6 +244,9 @@ class SettingsActivity : AppCompatActivity() {
         
         // Update log size display
         updateLogSizeDisplay()
+        
+        // Load voice settings
+        loadVoiceSettings()
         
         // Populate model settings
         baseUrlInput.setText(modelConfig.baseUrl)
@@ -309,6 +367,53 @@ class SettingsActivity : AppCompatActivity() {
         }
         btnClearLogs.setOnClickListener {
             showClearLogsDialog()
+        }
+        
+        // Voice settings listeners
+        btnVoiceModelAction.setOnClickListener {
+            onVoiceModelActionClick()
+        }
+
+        switchContinuousListening.setOnCheckedChangeListener { _, isChecked ->
+            // Skip if this is a programmatic change (not user interaction)
+            if (!switchContinuousListening.isPressed) {
+                return@setOnCheckedChangeListener
+            }
+            
+            settingsManager.setContinuousListening(isChecked)
+            // Start or stop the continuous listening service based on the switch state
+            if (isChecked) {
+                if (settingsManager.isVoiceModelDownloaded()) {
+                    // Check audio permission first (required for foreground service with microphone type)
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
+                        != PackageManager.PERMISSION_GRANTED) {
+                        // Request audio permission
+                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        return@setOnCheckedChangeListener
+                    }
+                    // Audio permission granted, check notification permission
+                    checkNotificationPermissionAndStart()
+                } else {
+                    // Model not downloaded, disable the switch and show a message
+                    switchContinuousListening.isChecked = false
+                    settingsManager.setContinuousListening(false)
+                    Toast.makeText(this, R.string.voice_model_required, Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                ContinuousListeningService.stop(this)
+            }
+        }
+
+        wakeWordInput.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                saveWakeWords()
+            }
+        }
+
+        sensitivitySlider.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                settingsManager.setWakeWordSensitivity(value / 100f)
+            }
         }
         
         // Clear errors on text change
@@ -608,6 +713,19 @@ class SettingsActivity : AppCompatActivity() {
             screenshotDelayMs = screenshotDelayMs
         )
         settingsManager.saveAgentConfig(agentConfig)
+        
+        // Save wake words
+        saveWakeWords()
+        
+        // Restart continuous listening service if running to apply new wake words
+        if (ContinuousListeningService.isRunning()) {
+            Logger.i(TAG, "Restarting continuous listening service to apply new wake words")
+            ContinuousListeningService.stop(this)
+            // Small delay to ensure service stops before restarting
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                ContinuousListeningService.start(this)
+            }, 500)
+        }
         
         Toast.makeText(this, R.string.settings_saved, Toast.LENGTH_SHORT).show()
         finish()
@@ -927,6 +1045,32 @@ class SettingsActivity : AppCompatActivity() {
         dialog.show()
     }
     
+    /**
+     * Checks notification permission and starts the service if granted.
+     * Called after audio permission is confirmed.
+     */
+    private fun checkNotificationPermissionAndStart() {
+        // Check notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) 
+                != PackageManager.PERMISSION_GRANTED) {
+                // Request notification permission
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return
+            }
+        }
+        // All permissions granted, start the service
+        startContinuousListeningService()
+    }
+    
+    /**
+     * Starts the continuous listening service after permission checks pass.
+     */
+    private fun startContinuousListeningService() {
+        ContinuousListeningService.start(this)
+        Toast.makeText(this, R.string.voice_listening_started, Toast.LENGTH_SHORT).show()
+    }
+    
     companion object {
         private const val TAG = "SettingsActivity"
     }
@@ -976,5 +1120,180 @@ class SettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.dialog_cancel, null)
             .show()
+    }
+    
+    // ==================== Voice Settings ====================
+
+    /**
+     * Loads voice settings and updates UI.
+     */
+    private fun loadVoiceSettings() {
+        Logger.d(TAG, "Loading voice settings")
+        
+        // Initialize voice model manager
+        if (voiceModelManager == null) {
+            voiceModelManager = VoiceModelManager(this)
+        }
+        
+        // Update model status
+        updateVoiceModelStatus()
+        
+        // Load continuous listening setting
+        switchContinuousListening.isChecked = settingsManager.isContinuousListeningEnabled()
+        
+        // Load wake words
+        val wakeWords = settingsManager.getWakeWordsList()
+        wakeWordInput.setText(wakeWords.joinToString(", "))
+        
+        // Load sensitivity
+        val sensitivity = settingsManager.getWakeWordSensitivity()
+        sensitivitySlider.value = sensitivity * 100f
+    }
+
+    /**
+     * Updates the voice model status display.
+     */
+    private fun updateVoiceModelStatus() {
+        val isDownloaded = voiceModelManager?.isModelDownloaded() == true
+        
+        if (isDownloaded) {
+            val sizeMB = voiceModelManager?.getDownloadedModelSizeMB() ?: 0
+            voiceModelStatus.text = getString(R.string.voice_model_downloaded, sizeMB)
+            voiceModelStatus.setTextColor(getColor(R.color.status_running))
+            btnVoiceModelAction.text = getString(R.string.voice_delete_model)
+            btnVoiceModelAction.setIconResource(R.drawable.ic_delete)
+        } else {
+            voiceModelStatus.text = getString(R.string.voice_model_not_downloaded)
+            voiceModelStatus.setTextColor(getColor(R.color.text_secondary))
+            btnVoiceModelAction.text = getString(R.string.voice_download_model)
+            btnVoiceModelAction.setIconResource(R.drawable.ic_download)
+        }
+    }
+
+    /**
+     * Handles voice model action button click.
+     */
+    private fun onVoiceModelActionClick() {
+        val isDownloaded = voiceModelManager?.isModelDownloaded() == true
+        
+        if (isDownloaded) {
+            showDeleteModelDialog()
+        } else {
+            showDownloadModelDialog()
+        }
+    }
+
+    /**
+     * Shows dialog to confirm model download.
+     */
+    private fun showDownloadModelDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_voice_download_confirm, null)
+        
+        AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setPositiveButton(R.string.voice_download_confirm_title) { _, _ ->
+                startModelDownload()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
+    /**
+     * Starts the model download process.
+     */
+    private fun startModelDownload() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_voice_download_progress, null)
+        val progressBar = dialogView.findViewById<android.widget.ProgressBar>(R.id.downloadProgressBar)
+        val progressText = dialogView.findViewById<TextView>(R.id.downloadProgressText)
+        
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .setNegativeButton(R.string.dialog_cancel) { _, _ ->
+                voiceModelManager?.cancelDownload()
+            }
+            .create()
+        
+        dialog.show()
+        
+        lifecycleScope.launch {
+            voiceModelManager?.downloadModel(object : VoiceModelDownloadListener {
+                override fun onDownloadStarted() {
+                    runOnUiThread {
+                        progressText.text = getString(R.string.voice_download_status_preparing)
+                    }
+                }
+                
+                override fun onDownloadProgress(progress: Int, downloadedBytes: Long, totalBytes: Long) {
+                    runOnUiThread {
+                        progressBar.progress = progress
+                        val downloadedMB = downloadedBytes / (1024 * 1024)
+                        val totalMB = if (totalBytes > 0) totalBytes / (1024 * 1024) else VoiceModelManager.ESTIMATED_MODEL_SIZE_MB.toLong()
+                        progressText.text = getString(R.string.voice_downloading_progress, progress)
+                    }
+                }
+                
+                override fun onDownloadCompleted(modelPath: String) {
+                    runOnUiThread {
+                        dialog.dismiss()
+                        settingsManager.setVoiceModelDownloaded(true, modelPath)
+                        updateVoiceModelStatus()
+                        Toast.makeText(this@SettingsActivity, R.string.voice_download_complete, Toast.LENGTH_SHORT).show()
+                    }
+                }
+                
+                override fun onDownloadFailed(error: String) {
+                    runOnUiThread {
+                        dialog.dismiss()
+                        Toast.makeText(this@SettingsActivity, getString(R.string.voice_download_failed, error), Toast.LENGTH_LONG).show()
+                    }
+                }
+                
+                override fun onDownloadCancelled() {
+                    runOnUiThread {
+                        dialog.dismiss()
+                    }
+                }
+            })
+        }
+    }
+
+    /**
+     * Shows dialog to confirm model deletion.
+     */
+    private fun showDeleteModelDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.voice_delete_confirm_title)
+            .setMessage(R.string.voice_delete_confirm_message)
+            .setPositiveButton(R.string.dialog_confirm) { _, _ ->
+                deleteVoiceModel()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+
+    /**
+     * Deletes the voice model.
+     */
+    private fun deleteVoiceModel() {
+        val success = voiceModelManager?.deleteModel() == true
+        if (success) {
+            settingsManager.setVoiceModelDownloaded(false, null)
+            updateVoiceModelStatus()
+            Toast.makeText(this, R.string.voice_delete_success, Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, R.string.voice_download_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Saves wake words from input.
+     */
+    private fun saveWakeWords() {
+        val input = wakeWordInput.text?.toString() ?: ""
+        val wakeWords = input.split(",", "，")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        settingsManager.setWakeWords(wakeWords)
     }
 }

@@ -24,6 +24,13 @@
     <string name="enable_keyboard">去启用</string>
     <string name="toast_keyboard_required">需要启用 AutoGLM Keyboard 才能输入文字</string>
     
+    <!-- Battery Optimization -->
+    <string name="battery_opt_title">电池优化</string>
+    <string name="battery_opt_ignored">已忽略电池优化</string>
+    <string name="battery_opt_not_ignored">未忽略电池优化</string>
+    <string name="battery_opt_request">去设置</string>
+    <string name="battery_opt_description">忽略电池优化可以让任务在后台更稳定地执行</string>
+    
     <!-- Task Section -->
     <string name="task_section_label">任务输入</string>
     <string name="task_input_hint">描述你想要执行的任务...</string>
@@ -231,4 +238,68 @@
     <string name="keyboard_hint">文本输入由 AutoGLM 控制</string>
     <string name="keyboard_settings_title">AutoGLM 键盘</string>
     <string name="keyboard_settings_subtitle">已启用</string>
+
+    <!-- Voice Input -->
+    <string name="voice_input_title">语音输入</string>
+    <string name="voice_settings_title">语音输入</string>
+    <string name="voice_settings_description">配置语音识别和唤醒词</string>
+    <string name="voice_model_status">模型状态</string>
+    <string name="voice_model_not_downloaded">未下载</string>
+    <string name="voice_model_downloaded">已下载 (%1$d MB)</string>
+    <string name="voice_download_model">下载模型</string>
+    <string name="voice_delete_model">删除模型</string>
+    <string name="voice_sensitivity">唤醒灵敏度</string>
+    <string name="voice_sensitivity_low">低</string>
+    <string name="voice_sensitivity_high">高</string>
+    <string name="voice_wake_word_helper">多个唤醒词用逗号分隔</string>
+    <string name="voice_download_confirm_title">下载语音模型</string>
+    <string name="voice_download_confirm_message">语音识别需要下载离线模型才能使用。模型支持中文、英文、日语、韩语和粤语识别。</string>
+    <string name="voice_download_size_hint">模型大小约 230MB，建议在 WiFi 环境下下载</string>
+    <string name="voice_downloading_title">正在下载语音模型</string>
+    <string name="voice_downloading_progress">%1$d%%</string>
+    <string name="voice_download_status_preparing">准备下载...</string>
+    <string name="voice_download_status_downloading">正在下载 VAD 模型...</string>
+    <string name="voice_download_status_downloading_asr">正在下载 ASR 模型...</string>
+    <string name="voice_download_status_extracting">正在解压模型...</string>
+    <string name="voice_download_complete">下载完成</string>
+    <string name="voice_download_failed">下载失败: %1$s</string>
+    <string name="voice_download_cancelled">下载已取消</string>
+    <string name="voice_continuous_listening">后台持续监听</string>
+    <string name="voice_continuous_listening_desc">开启后在后台持续监听语音，说出唤醒词可快速启动任务</string>
+    <string name="voice_listening_active">正在监听语音...</string>
+    <string name="voice_wake_word">唤醒词</string>
+    <string name="voice_wake_word_hint">多个唤醒词用逗号分隔</string>
+    <string name="voice_wake_word_default">你好小智</string>
+    <string name="voice_wake_sensitivity">唤醒词灵敏度</string>
+    <string name="voice_listening">正在听...</string>
+    <string name="voice_recognizing">识别中...</string>
+    <string name="voice_permission_required">需要麦克风权限才能使用语音输入</string>
+    <string name="voice_permission_denied">麦克风权限被拒绝</string>
+    <string name="voice_model_required">请先下载语音模型</string>
+    <string name="voice_notification_permission_required">需要通知权限才能在后台运行语音监听服务</string>
+    <string name="voice_audio_permission_required">需要麦克风权限才能使用语音监听功能</string>
+    <string name="voice_listening_started">后台语音监听已启动</string>
+    <string name="voice_delete_confirm_title">删除语音模型</string>
+    <string name="voice_delete_confirm_message">确定要删除语音模型吗？删除后需要重新下载才能使用语音输入功能。</string>
+    <string name="voice_delete_success">语音模型已删除</string>
+    <string name="voice_wake_word_detected">检测到唤醒词: %1$s</string>
+    
+    <!-- Voice Status Messages -->
+    <string name="voice_recording_hint">正在聆听，请说话…</string>
+    <string name="voice_recognizing_hint">正在识别...</string>
+    <string name="voice_stop_recording">停止输入</string>
+    <string name="voice_auto_run_countdown">%d 秒后自动运行</string>
+    <string name="voice_cancel_auto_run">取消</string>
+    <string name="voice_confirm_with_countdown">确认 (%d)</string>
+    <string name="voice_confirm">确认</string>
+    
+    <!-- Voice Error Messages -->
+    <string name="voice_model_load_failed">语音模型加载失败</string>
+    <string name="voice_recording_failed">语音输入失败</string>
+    <string name="voice_recognition_failed">语音识别失败</string>
+    <string name="voice_network_error">网络错误</string>
+    <string name="voice_unknown_error">未知错误</string>
+    <string name="voice_downloading">正在下载...</string>
+    <string name="voice_download_progress">下载进度: %1$d%%</string>
+    <string name="voice_download_confirm">下载确认</string>
 </resources>

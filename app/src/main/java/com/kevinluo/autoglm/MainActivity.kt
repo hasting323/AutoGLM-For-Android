@@ -1,9 +1,14 @@
 package com.kevinluo.autoglm
 
+import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.IBinder
@@ -13,6 +18,7 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -26,11 +32,22 @@ import com.kevinluo.autoglm.agent.PhoneAgentListener
 import com.kevinluo.autoglm.settings.SettingsActivity
 import com.kevinluo.autoglm.ui.FloatingWindowService
 import com.kevinluo.autoglm.ui.TaskStatus
+import com.kevinluo.autoglm.util.KeepAliveManager
 import com.kevinluo.autoglm.util.Logger
+import com.kevinluo.autoglm.util.ServiceStateManager
+import com.kevinluo.autoglm.voice.ContinuousListeningService
+import com.kevinluo.autoglm.voice.VoiceInputManager
+import com.kevinluo.autoglm.voice.VoiceInputListener
+import com.kevinluo.autoglm.voice.VoiceRecognitionResult
+import com.kevinluo.autoglm.voice.VoiceError
+import com.kevinluo.autoglm.voice.VoiceModelManager
+import com.kevinluo.autoglm.voice.VoiceModelDownloadListener
+import com.kevinluo.autoglm.voice.VoiceRecordingDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -73,6 +90,12 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
     private lateinit var keyboardStatusText: TextView
     private lateinit var enableKeyboardBtn: Button
 
+    // Battery optimization views
+    private var batteryOptCard: View? = null
+    private var batteryStatusIcon: android.widget.ImageView? = null
+    private var batteryStatusText: TextView? = null
+    private var requestBatteryOptBtn: Button? = null
+
     // Task input views
     private lateinit var taskInputLayout: TextInputLayout
     private lateinit var taskInput: TextInputEditText
@@ -92,6 +115,33 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
     // Current step tracking for floating window
     private var currentStepNumber = 0
     private var currentThinking = ""
+
+    // Voice input
+    private lateinit var btnVoiceInput: ImageButton
+    private var voiceInputManager: VoiceInputManager? = null
+    private var isVoiceRecording = false
+
+    private val audioPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            onVoiceButtonClick()
+        } else {
+            Toast.makeText(this, R.string.voice_permission_denied, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Wake word broadcast receiver
+    private val wakeWordReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ContinuousListeningService.ACTION_WAKE_WORD_DETECTED) {
+                val wakeWord = intent.getStringExtra(ContinuousListeningService.EXTRA_WAKE_WORD)
+                val recognizedText = intent.getStringExtra(ContinuousListeningService.EXTRA_RECOGNIZED_TEXT)
+                Logger.i(TAG, "Wake word detected: $wakeWord, text: $recognizedText")
+                onWakeWordDetected(wakeWord, recognizedText)
+            }
+        }
+    }
 
     private val userServiceArgs = Shizuku.UserServiceArgs(
         ComponentName(
@@ -179,10 +229,50 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         setupListeners()
         setupShizukuListeners()
         
+        // Register wake word receiver
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                wakeWordReceiver,
+                IntentFilter(ContinuousListeningService.ACTION_WAKE_WORD_DETECTED),
+                RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            registerReceiver(
+                wakeWordReceiver,
+                IntentFilter(ContinuousListeningService.ACTION_WAKE_WORD_DETECTED)
+            )
+        }
+        
         updateShizukuStatus()
         updateOverlayPermissionStatus()
         updateKeyboardStatus()
         updateTaskStatus(TaskStatus.IDLE)
+        
+        // Restore continuous listening service if it was enabled
+        restoreContinuousListeningService()
+        
+        // 检查是否是从唤醒词启动的
+        handleWakeWordIntent(intent)
+    }
+    
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let { handleWakeWordIntent(it) }
+    }
+    
+    /**
+     * 处理唤醒词 Intent
+     */
+    private fun handleWakeWordIntent(intent: Intent) {
+        if (intent.action == ContinuousListeningService.ACTION_WAKE_WORD_DETECTED) {
+            val wakeWord = intent.getStringExtra(ContinuousListeningService.EXTRA_WAKE_WORD)
+            Logger.i(TAG, "Handling wake word intent: $wakeWord")
+            
+            // 延迟一点确保 Activity 完全显示
+            android.os.Handler(mainLooper).postDelayed({
+                onWakeWordDetected(wakeWord, null)
+            }, 300)
+        }
     }
     
     /**
@@ -227,16 +317,66 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
             }
         }
     }
+    
+    /**
+     * Updates the battery optimization status display.
+     *
+     * Checks if the app is ignoring battery optimizations and updates the UI accordingly.
+     */
+    private fun updateBatteryOptimizationStatus() {
+        val isIgnoring = KeepAliveManager.isIgnoringBatteryOptimizations(this)
+        
+        batteryOptCard?.visibility = View.VISIBLE
+        
+        if (isIgnoring) {
+            batteryStatusText?.text = getString(R.string.battery_opt_ignored)
+            batteryStatusIcon?.setColorFilter(ContextCompat.getColor(this, R.color.status_running))
+            requestBatteryOptBtn?.visibility = View.GONE
+        } else {
+            batteryStatusText?.text = getString(R.string.battery_opt_not_ignored)
+            batteryStatusIcon?.setColorFilter(ContextCompat.getColor(this, R.color.status_waiting))
+            requestBatteryOptBtn?.visibility = View.VISIBLE
+        }
+    }
+    
+    /**
+     * Restores the continuous listening service if it was previously enabled.
+     *
+     * Checks if continuous listening is enabled in settings and the voice model
+     * is downloaded, then starts the service if it's not already running.
+     */
+    private fun restoreContinuousListeningService() {
+        val settingsManager = componentManager.settingsManager
+        if (settingsManager.isContinuousListeningEnabled() && 
+            settingsManager.isVoiceModelDownloaded() &&
+            !ContinuousListeningService.isRunning()) {
+            Logger.i(TAG, "Restoring continuous listening service")
+            ContinuousListeningService.start(this)
+        }
+    }
 
     override fun onResume() {
         super.onResume()
         Logger.d(TAG, "onResume - checking for settings changes")
+        
+        // 同步修复状态
+        KeepAliveManager.syncFixState(this)
+        
+        // Update Shizuku status and rebind if needed
+        updateShizukuStatus()
+        if (!componentManager.isServiceConnected && hasShizukuPermission()) {
+            Logger.i(TAG, "Service not connected, attempting to rebind")
+            bindUserService()
+        }
         
         // Update overlay permission status (user may have granted it)
         updateOverlayPermissionStatus()
         
         // Update keyboard status (user may have enabled it)
         updateKeyboardStatus()
+        
+        // Update battery optimization status
+        updateBatteryOptimizationStatus()
         
         // Re-setup floating window callbacks if service is running
         FloatingWindowService.getInstance()?.let { service ->
@@ -280,6 +420,17 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
 
     override fun onDestroy() {
         Logger.i(TAG, "onDestroy - cleaning up")
+        
+        // Release voice input manager
+        voiceInputManager?.release()
+        
+        // Unregister wake word receiver
+        try {
+            unregisterReceiver(wakeWordReceiver)
+        } catch (e: Exception) {
+            Logger.e(TAG, "Error unregistering wake word receiver", e)
+        }
+        
         super.onDestroy()
         
         // Remove Shizuku listeners
@@ -329,12 +480,19 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         keyboardStatusText = findViewById(R.id.keyboardStatusText)
         enableKeyboardBtn = findViewById(R.id.enableKeyboardBtn)
 
+        // Battery optimization views
+        batteryOptCard = findViewById(R.id.batteryOptCard)
+        batteryStatusIcon = findViewById(R.id.batteryStatusIcon)
+        batteryStatusText = findViewById(R.id.batteryStatusText)
+        requestBatteryOptBtn = findViewById(R.id.requestBatteryOptBtn)
+
         // Task input views
         taskInputLayout = findViewById(R.id.taskInputLayout)
         taskInput = findViewById(R.id.taskInput)
         startTaskBtn = findViewById(R.id.startTaskBtn)
         cancelTaskBtn = findViewById(R.id.cancelTaskBtn)
         btnSelectTemplate = findViewById(R.id.btnSelectTemplate)
+        btnVoiceInput = findViewById(R.id.btnVoiceInput)
 
         // Task status views
         taskStatusIndicator = findViewById(R.id.taskStatusIndicator)
@@ -385,6 +543,11 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
             com.kevinluo.autoglm.input.KeyboardHelper.openInputMethodSettings(this)
         }
 
+        // Battery optimization button
+        requestBatteryOptBtn?.setOnClickListener {
+            KeepAliveManager.requestIgnoreBatteryOptimizations(this)
+        }
+
         // Start task button
         startTaskBtn.setOnClickListener {
             startTask()
@@ -398,6 +561,11 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         // Select template button
         btnSelectTemplate.setOnClickListener {
             showTemplateSelectionDialog()
+        }
+
+        // Voice input button
+        btnVoiceInput.setOnClickListener {
+            onVoiceButtonClick()
         }
 
         // Enable start button when task input has text
@@ -428,13 +596,12 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
             return
         }
 
-        // Start floating window service as foreground service
+        // 保存悬浮窗启用状态
+        ServiceStateManager.setFloatingWindowEnabled(this, true)
+
+        // Start floating window service (not as foreground service, overlay window keeps it alive)
         val serviceIntent = Intent(this, FloatingWindowService::class.java)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        startService(serviceIntent)
 
         // Setup callbacks after service starts
         android.os.Handler(mainLooper).postDelayed({
@@ -669,11 +836,7 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         if (FloatingWindowService.canDrawOverlays(this)) {
             Logger.d(TAG, "startTask: Starting floating window service")
             val serviceIntent = Intent(this, FloatingWindowService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
+            startService(serviceIntent)
         } else {
             Toast.makeText(this, R.string.toast_overlay_permission_required, Toast.LENGTH_LONG).show()
             FloatingWindowService.requestOverlayPermission(this)
@@ -687,6 +850,12 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
         runningSection.visibility = View.VISIBLE
         cancelTaskBtn.isEnabled = true
         taskInput.isEnabled = false
+        
+        // 获取 WakeLock 保持任务执行
+        KeepAliveManager.acquireTaskWakeLock(this)
+        
+        // 记录任务执行时间
+        ServiceStateManager.recordTaskExecution(this)
         
         Logger.i(TAG, "Starting task: $taskDescription")
         
@@ -731,6 +900,9 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
                 val result = agent.run(taskDescription)
                 
                 withContext(Dispatchers.Main) {
+                    // 释放 WakeLock
+                    KeepAliveManager.releaseTaskWakeLock()
+                    
                     if (result.success) {
                         Logger.i(TAG, "Task completed: ${result.message}")
                         updateTaskStatus(TaskStatus.COMPLETED)
@@ -743,6 +915,9 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
             } catch (e: Exception) {
                 Logger.e(TAG, "Task error", e)
                 withContext(Dispatchers.Main) {
+                    // 释放 WakeLock
+                    KeepAliveManager.releaseTaskWakeLock()
+                    
                     updateTaskStatus(TaskStatus.FAILED)
                     updateTaskButtonStates()
                 }
@@ -759,6 +934,9 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
      */
     private fun cancelTask() {
         Logger.i(TAG, "Cancelling task")
+        
+        // 释放 WakeLock
+        KeepAliveManager.releaseTaskWakeLock()
         
         // Cancel the agent - this will cancel any ongoing network requests
         componentManager.phoneAgent?.cancel()
@@ -1145,6 +1323,255 @@ class MainActivity : AppCompatActivity(), PhoneAgentListener {
             }
             .setNegativeButton(R.string.dialog_cancel, null)
             .show()
+    }
+    
+    // endregion
+
+    // region Voice Input
+    
+    /**
+     * Handles voice button click.
+     * Checks permissions and model status before starting recording.
+     */
+    private fun onVoiceButtonClick() {
+        // Check audio permission first
+        if (!hasAudioPermission()) {
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        
+        // Initialize voice input manager if needed
+        if (voiceInputManager == null) {
+            voiceInputManager = VoiceInputManager(this)
+        }
+        
+        // Check if model is downloaded
+        if (!voiceInputManager!!.isModelReady()) {
+            showModelDownloadDialog()
+            return
+        }
+        
+        // Toggle recording
+        if (isVoiceRecording) {
+            stopVoiceRecording()
+        } else {
+            startVoiceRecording()
+        }
+    }
+    
+    /**
+     * Checks if audio recording permission is granted.
+     */
+    private fun hasAudioPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+    
+    /**
+     * Shows dialog to confirm model download.
+     */
+    private fun showModelDownloadDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_voice_download_confirm, null)
+        
+        AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setPositiveButton(R.string.voice_download_confirm) { _, _ ->
+                startModelDownload()
+            }
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .show()
+    }
+    
+    /**
+     * Starts the model download process.
+     */
+    private fun startModelDownload() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_voice_download_progress, null)
+        val progressBar = dialogView.findViewById<android.widget.ProgressBar>(R.id.downloadProgressBar)
+        val progressText = dialogView.findViewById<TextView>(R.id.downloadProgressText)
+        
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .setNegativeButton(R.string.dialog_cancel) { _, _ ->
+                voiceInputManager?.getModelManager()?.cancelDownload()
+            }
+            .create()
+        
+        dialog.show()
+        
+        lifecycleScope.launch {
+            voiceInputManager?.getModelManager()?.downloadModel(object : VoiceModelDownloadListener {
+                override fun onDownloadStarted() {
+                    runOnUiThread {
+                        progressText.text = getString(R.string.voice_downloading)
+                    }
+                }
+                
+                override fun onDownloadProgress(progress: Int, downloadedBytes: Long, totalBytes: Long) {
+                    runOnUiThread {
+                        progressBar.progress = progress
+                        val downloadedMB = downloadedBytes / (1024 * 1024)
+                        val totalMB = if (totalBytes > 0) totalBytes / (1024 * 1024) else VoiceModelManager.ESTIMATED_MODEL_SIZE_MB.toLong()
+                        progressText.text = getString(R.string.voice_download_progress, downloadedMB, totalMB)
+                    }
+                }
+                
+                override fun onDownloadCompleted(modelPath: String) {
+                    runOnUiThread {
+                        dialog.dismiss()
+                        Toast.makeText(this@MainActivity, R.string.voice_download_complete, Toast.LENGTH_SHORT).show()
+                    }
+                }
+                
+                override fun onDownloadFailed(error: String) {
+                    runOnUiThread {
+                        dialog.dismiss()
+                        Toast.makeText(this@MainActivity, getString(R.string.voice_download_failed, error), Toast.LENGTH_LONG).show()
+                    }
+                }
+                
+                override fun onDownloadCancelled() {
+                    runOnUiThread {
+                        dialog.dismiss()
+                    }
+                }
+            })
+        }
+    }
+    
+    /**
+     * Starts voice recording.
+     */
+    private fun startVoiceRecording() {
+        // 清空输入框
+        taskInput.setText("")
+        
+        // 显示语音录音对话框
+        val dialog = VoiceRecordingDialog(
+            context = this,
+            voiceInputManager = voiceInputManager!!,
+            onResult = { result ->
+                if (result.text.isNotBlank()) {
+                    val currentText = taskInput.text?.toString() ?: ""
+                    if (currentText.isBlank()) {
+                        taskInput.setText(result.text)
+                    } else {
+                        taskInput.setText("$currentText ${result.text}")
+                    }
+                    taskInput.setSelection(taskInput.text?.length ?: 0)
+                    
+                    // 用户已在对话框内确认，直接运行任务
+                    startTask()
+                }
+            },
+            onError = { error ->
+                val errorMsg = when (error) {
+                    VoiceError.PermissionDenied -> getString(R.string.voice_permission_denied)
+                    VoiceError.ModelNotDownloaded -> getString(R.string.voice_model_not_downloaded)
+                    VoiceError.ModelLoadFailed -> getString(R.string.voice_model_load_failed)
+                    VoiceError.RecordingFailed -> getString(R.string.voice_recording_failed)
+                    VoiceError.RecognitionFailed -> getString(R.string.voice_recognition_failed)
+                    VoiceError.NetworkError -> getString(R.string.voice_network_error)
+                    is VoiceError.Unknown -> error.message
+                }
+                Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show()
+            }
+        )
+        dialog.show()
+    }
+    
+    /**
+     * Stops voice recording.
+     */
+    private fun stopVoiceRecording() {
+        voiceInputManager?.stopRecording()
+    }
+    
+    /**
+     * Handles wake word detection.
+     * Shows voice recording dialog for user to continue speaking.
+     */
+    private fun onWakeWordDetected(wakeWord: String?, recognizedText: String?) {
+        runOnUiThread {
+            Logger.i(TAG, "Wake word detected: $wakeWord, text: $recognizedText")
+            
+            // 播放提示音
+            playWakeSound()
+            
+            // 显示 Toast 提示
+            Toast.makeText(this, getString(R.string.voice_wake_word_detected, wakeWord), Toast.LENGTH_SHORT).show()
+            
+            // 弹出语音输入对话框
+            showVoiceInputDialog()
+        }
+    }
+    
+    /**
+     * 播放唤醒提示音
+     */
+    private fun playWakeSound() {
+        try {
+            val notification = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+            val ringtone = android.media.RingtoneManager.getRingtone(this, notification)
+            ringtone?.play()
+        } catch (e: Exception) {
+            Logger.e(TAG, "Error playing wake sound", e)
+        }
+    }
+    
+    /**
+     * 显示语音输入对话框
+     */
+    private fun showVoiceInputDialog() {
+        // 初始化语音输入管理器
+        if (voiceInputManager == null) {
+            voiceInputManager = VoiceInputManager(this)
+        }
+        
+        // 检查模型是否已下载
+        if (!voiceInputManager!!.isModelReady()) {
+            Toast.makeText(this, R.string.voice_model_not_downloaded, Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // 清空输入框
+        taskInput.setText("")
+        
+        // 显示语音录音对话框
+        val dialog = VoiceRecordingDialog(
+            context = this,
+            voiceInputManager = voiceInputManager!!,
+            onResult = { result ->
+                if (result.text.isNotBlank()) {
+                    val currentText = taskInput.text?.toString() ?: ""
+                    if (currentText.isBlank()) {
+                        taskInput.setText(result.text)
+                    } else {
+                        taskInput.setText("$currentText ${result.text}")
+                    }
+                    taskInput.setSelection(taskInput.text?.length ?: 0)
+                    
+                    // 用户已在对话框内确认，直接运行任务
+                    startTask()
+                }
+            },
+            onError = { error ->
+                val errorMsg = when (error) {
+                    VoiceError.PermissionDenied -> getString(R.string.voice_permission_denied)
+                    VoiceError.ModelNotDownloaded -> getString(R.string.voice_model_not_downloaded)
+                    VoiceError.ModelLoadFailed -> getString(R.string.voice_model_load_failed)
+                    VoiceError.RecordingFailed -> getString(R.string.voice_recording_failed)
+                    VoiceError.RecognitionFailed -> getString(R.string.voice_recognition_failed)
+                    VoiceError.NetworkError -> getString(R.string.voice_network_error)
+                    is VoiceError.Unknown -> error.message
+                }
+                Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show()
+            }
+        )
+        dialog.show()
     }
     
     // endregion

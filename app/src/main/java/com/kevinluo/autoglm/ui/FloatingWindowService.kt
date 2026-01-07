@@ -1,9 +1,5 @@
 package com.kevinluo.autoglm.ui
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -23,7 +19,6 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -118,8 +113,6 @@ class FloatingWindowService : Service(), FloatingWindowController {
 
     companion object {
         private const val TAG = "FloatingWindow"
-        private const val CHANNEL_ID = "floating_window"
-        private const val NOTIFICATION_ID = 1001
 
         // Window size as percentage of screen
         private const val WIDTH_PERCENT = 0.80f
@@ -146,13 +139,13 @@ class FloatingWindowService : Service(), FloatingWindowController {
         super.onCreate()
         instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        createNotificationChannel()
         Logger.d(TAG, "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, createNotification())
-
+        // 不再使用前台服务，悬浮窗本身就能保持显示
+        // 如果需要保活，依赖 ContinuousListeningService 的前台通知
+        
         // Only create the window view, don't show it automatically
         // Window will be shown when show() is called explicitly
         if (floatingView == null && canDrawOverlays(this)) {
@@ -381,9 +374,6 @@ class FloatingWindowService : Service(), FloatingWindowController {
         serviceScope.launch {
             Logger.d(TAG, "updateStatus serviceScope.launch executing, status: $status, floatingView: $floatingView")
             currentStatus = status
-            
-            // Update foreground notification
-            updateNotification(status)
             
             // If switching to RUNNING, clear previous steps
             if (status == TaskStatus.RUNNING) {
@@ -1126,74 +1116,6 @@ class FloatingWindowService : Service(), FloatingWindowController {
                 Logger.e(TAG, "Error updating layout after minimize", e)
             }
         }
-    }
-
-    /**
-     * Creates the notification channel for the foreground service.
-     */
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.app_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.notification_service_running)
-                setShowBadge(false)
-                // Ensure the notification is visible
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            }
-            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
-        }
-    }
-
-    /**
-     * Creates the notification for the foreground service.
-     *
-     * @param title Optional title for the notification
-     * @param text Optional text for the notification
-     * @return The notification to display
-     */
-    private fun createNotification(
-        title: String = getString(R.string.app_name),
-        text: String = getString(R.string.notification_service_running)
-    ): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(R.drawable.ic_layers)
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .build()
-    }
-    
-    /**
-     * Updates the foreground notification with new status.
-     *
-     * @param status The current task status
-     */
-    private fun updateNotification(status: TaskStatus) {
-        val (title, text) = when (status) {
-            TaskStatus.IDLE -> getString(R.string.app_name) to getString(R.string.notification_service_running)
-            TaskStatus.RUNNING -> getString(R.string.app_name) to getString(R.string.notification_task_running)
-            TaskStatus.PAUSED -> getString(R.string.app_name) to getString(R.string.notification_task_paused)
-            TaskStatus.COMPLETED -> getString(R.string.app_name) to getString(R.string.notification_task_completed)
-            TaskStatus.FAILED -> getString(R.string.app_name) to getString(R.string.notification_task_failed)
-            TaskStatus.WAITING_CONFIRMATION -> getString(R.string.app_name) to getString(R.string.notification_waiting_confirm)
-            TaskStatus.WAITING_TAKEOVER -> getString(R.string.app_name) to getString(R.string.notification_waiting_takeover)
-        }
-        
-        val notification = createNotification(title, text)
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager?.notify(NOTIFICATION_ID, notification)
     }
 
     // ==================== Steps Adapter ====================

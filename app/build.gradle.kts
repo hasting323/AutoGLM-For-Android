@@ -134,6 +134,13 @@ dependencies {
     // Kotlin Serialization for JSON parsing
     implementation(libs.kotlinx.serialization.json)
     
+    // Sherpa-ONNX for offline speech recognition
+    // Available via JitPack: https://jitpack.io/#k2-fsa/sherpa-onnx
+    implementation("com.github.k2-fsa:sherpa-onnx:1.12.20")
+    
+    // Apache Commons Compress for tar.bz2 extraction
+    implementation("org.apache.commons:commons-compress:1.26.0")
+    
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotest.runner.junit5)

@@ -311,6 +311,80 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Battery Optimization Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/batteryOptCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/card_background"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <!-- Status Icon -->
+                        <ImageView
+                            android:id="@+id/batteryStatusIcon"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:src="@drawable/ic_battery"
+                            app:tint="@color/icon_primary"
+                            android:contentDescription="Battery" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/battery_opt_title"
+                                android:textColor="@color/text_primary"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:id="@+id/batteryStatusText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/battery_opt_not_ignored"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="14sp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    <!-- Request Button inside card -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/requestBatteryOptBtn"
+                        style="@style/Widget.App.Button.Tonal.Large"
+                        android:layout_width="wrap_content"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/battery_opt_request"
+                        app:icon="@drawable/ic_battery"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- History Card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/historyBtn"
@@ -394,6 +468,15 @@
                             android:text="@string/task_section_label"
                             android:textColor="@color/text_primary"
                             android:textSize="16sp" />
+
+                        <ImageButton
+                            android:id="@+id/btnVoiceInput"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/voice_input_title"
+                            android:src="@drawable/ic_mic"
+                            app:tint="@color/icon_secondary" />
 
                         <ImageButton
                             android:id="@+id/btnSelectTemplate"
